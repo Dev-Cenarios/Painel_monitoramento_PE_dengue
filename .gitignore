@@ -1,0 +1,16 @@
+# ambiente
+.venv/
+__pycache__/
+*.pyc
+
+# caches (regeneraveis)
+app_cache/
+data/*.tmp
+
+# artefatos do treino (regeneraveis com python forecasting/train_models.py)
+forecasting/models/
+
+# editor / SO
+.Rhistory
+.DS_Store
+Thumbs.db

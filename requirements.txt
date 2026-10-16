@@ -1,0 +1,16 @@
+# Painel
+shiny>=1.8
+htmltools>=0.7
+libsass>=0.23        # compila o tema Bootstrap (ui.Theme)
+jinja2>=3.1          # tabela "Ultimas semanas" (render.table)
+pandas>=3.0
+numpy>=2.0
+duckdb>=1.5
+pyarrow>=20
+# ETL
+requests>=2.32
+# Previsao
+statsmodels>=0.15
+scipy>=1.14
+patsy>=1.0
+scikit-learn>=1.6    # opcional: classe "machine learning" (Random Forest)
