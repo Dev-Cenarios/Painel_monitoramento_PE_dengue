@@ -67,31 +67,36 @@ aba_painel = ui.nav_panel(
     ),
     # 2. KPIs
     kpi_ui("kpi"),
-    # 3. mapa (7) | evolucao temporal (5)
+    # 3. mapa (5) | tendencia por municipio sobre evolucao temporal (7). O card
+    # do mapa estica ate a altura da coluna da direita (grid do bslib +
+    # html-fill no mapa).
     ui.layout_columns(
         cartao_grafico("Distribuição espacial", mapa_saida("mapa", height="540px"), mapa_controles("mapa")),
-        ui.navset_card_tab(
-            ui.nav_panel("Série", ui.card_body(serie_temporal_saida("serie", height="460px"), class_="p-0")),
-            ui.nav_panel("Curva epidêmica",
-                         ui.card_body(curva_epidemica_saida("curva", height="460px"), class_="p-0")),
-            # "(InfoDengue)": este e o Rt real; o card de tendencia abaixo e outro indicador.
-            ui.nav_panel("Rt (InfoDengue)", ui.card_body(rt_saida("rt", height="460px"), class_="p-0")),
-            ui.nav_spacer(),
-            ui.nav_control(ui.popover(
-                gatilho_opcoes(),
-                ui.h6("Série temporal", class_="mt-0"), serie_temporal_controles("serie"), ui.hr(),
-                ui.h6("Curva epidêmica"), curva_epidemica_controles("curva"), ui.hr(),
-                ui.h6("Rt (InfoDengue)"), rt_controles("rt"),
-                title="Opções", placement="left",
-            )),
-            title=ui.span("Evolução temporal", class_="fw-semibold"),
-            full_screen=True,
+        ui.div(
+            # Tendencia por municipio: nao e o Rt real - ver painel/mod_mapa_rt.py.
+            cartao_grafico("Rt — Tendência por município (quadrantes)", mapa_rt_saida("tendencia", height="420px"),
+                           mapa_rt_controles("tendencia")),
+            ui.navset_card_tab(
+                ui.nav_panel("Série", ui.card_body(serie_temporal_saida("serie", height="280px"), class_="p-0")),
+                ui.nav_panel("Curva epidêmica",
+                             ui.card_body(curva_epidemica_saida("curva", height="280px"), class_="p-0")),
+                # "(InfoDengue)": este e o Rt real; o card de tendencia acima e outro indicador.
+                ui.nav_panel("Rt (InfoDengue)", ui.card_body(rt_saida("rt", height="280px"), class_="p-0")),
+                ui.nav_spacer(),
+                ui.nav_control(ui.popover(
+                    gatilho_opcoes(),
+                    ui.h6("Série temporal", class_="mt-0"), serie_temporal_controles("serie"), ui.hr(),
+                    ui.h6("Curva epidêmica"), curva_epidemica_controles("curva"), ui.hr(),
+                    ui.h6("Rt (InfoDengue)"), rt_controles("rt"),
+                    title="Opções", placement="left",
+                )),
+                title=ui.span("Evolução temporal", class_="fw-semibold"),
+                full_screen=True,
+            ),
+            class_="d-flex flex-column bslib-gap-spacing",
         ),
-        col_widths=(7, 5),
+        col_widths=(5, 7),
     ),
-    # 4. tendencia por municipio (nao e o Rt real - ver painel/mod_mapa_rt.py)
-    cartao_grafico("Rt — Tendência por município (quadrantes)", mapa_rt_saida("tendencia", height="560px"),
-                   mapa_rt_controles("tendencia")),
     # 5a. diagrama de controle + previsao
     ui.card(
         ui.card_header(ui.span("Diagrama de controle (canal endêmico) & previsão de casos", class_="fw-semibold"),

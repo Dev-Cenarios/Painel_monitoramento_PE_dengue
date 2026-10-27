@@ -51,8 +51,10 @@ def mapa_saida(height: str = "540px"):
             class_="btn btn-sm btn-light shadow-sm",
             style="position:absolute; top:8px; left:8px; z-index:5; padding:.15rem .5rem; font-size:.8rem;",
         ),
-        output_echarts("mapa", height=height),
-        class_="position-relative",
+        # html-fill-*: o mapa estica ate a altura do card, que acompanha a
+        # coluna da direita (Rt + evolucao temporal) em app.py.
+        output_echarts("mapa", height=height).add_class("html-fill-item"),
+        class_="position-relative html-fill-item html-fill-container",
     )
 
 
