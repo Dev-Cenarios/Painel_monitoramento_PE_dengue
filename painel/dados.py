@@ -1,17 +1,16 @@
 # ==============================================================================
 # Dengue PE | painel/dados.py
-# Fonte de dados (Parquet via DuckDB), dicionario geografico, malhas e helpers
-# de consulta. Equivale a parte de dados do global.R do RIDE; executado UMA vez,
-# na importacao.
+# Fonte de dados (Parquet em memoria via pandas), dicionario geografico, malhas
+# e helpers de consulta. Equivale a parte de dados do global.R do RIDE;
+# executado UMA vez, na importacao.
 #
-# Por que DuckDB: os filtros viram WHERE executados na leitura do Parquet
-# (predicate pushdown) e so as colunas citadas saem do disco. Nada de carregar
-# o arquivo inteiro na RAM por consulta.
+# A base inteira (~114 mil linhas) fica num DataFrame por processo; as
+# agregacoes por recorte sao groupby sobre ele, cacheadas por recorte.
 #
 # Recorte em tres niveis: Pernambuco (base inteira) -> Regiao de Saude (GERES)
 # -> Municipio. A regiao vem de data/regioes_saude_pe.csv (DATASUS, ver
-# prep/00_regioes_saude.py) e entra na VIEW `dengue` por juncao, de modo que
-# filtrar por regiao tambem e um WHERE no SQL.
+# prep/00_regioes_saude.py) e entra na base por juncao, de modo que filtrar por
+# regiao e um filtro de coluna como outro qualquer.
 # ==============================================================================
 
 from __future__ import annotations
@@ -20,7 +19,6 @@ import hashlib
 import json
 import logging
 import tempfile
-import threading
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
@@ -30,7 +28,7 @@ import numpy as np
 import pandas as pd
 
 from . import config as cfg
-from .fonte import conectar
+from .fonte import carregar, filtrar
 
 log = logging.getLogger("dengue_pe")
 if not log.handlers:
@@ -49,16 +47,9 @@ if not cfg.REGIOES_CSV.exists():
     )
 
 
-# Uma conexao em memoria por processo. O Shiny for Python atende as sessoes num
-# unico laco de eventos, mas o lock protege chamadas vindas de threads (ex.:
-# previsao calculada fora do laco).
-_CON = conectar()
-_LOCK = threading.Lock()
-
-
-def consultar(sql: str, params: list | None = None) -> pd.DataFrame:
-    with _LOCK:
-        return _CON.execute(sql, params or []).df()
+# Uma copia da base por processo, somente leitura: pode ser lida de qualquer
+# thread (ex.: previsao calculada fora do laco de eventos) sem lock.
+DENGUE = carregar()
 
 
 log.info("Fonte: %s (%.1f MB).", cfg.PARQUET_DENGUE, cfg.PARQUET_DENGUE.stat().st_size / 1024**2)
@@ -71,12 +62,10 @@ VERSAO_DADOS = f"{_st.st_size}-{int(_st.st_mtime)}"
 # ------------------------------------------------- dicionario geografico -----
 # Um DISTINCT sobre a base: e AQUI que o escopo do painel se define. Nao ha
 # lista de municipios no app - trocar o Parquet troca os seletores.
-GEO_DICT = consultar("""
-    SELECT DISTINCT municipio_geocodigo, municipio_nome, uf_ibge,
-           regiao_id, regiao_nome, regiao_ordem
-    FROM dengue
-    WHERE municipio_geocodigo IS NOT NULL
-""")
+GEO_DICT = (DENGUE.loc[DENGUE["municipio_geocodigo"].notna(),
+                       ["municipio_geocodigo", "municipio_nome", "uf_ibge",
+                        "regiao_id", "regiao_nome", "regiao_ordem"]]
+            .drop_duplicates())
 GEO_DICT["municipio_geocodigo"] = GEO_DICT["municipio_geocodigo"].astype(int)
 GEO_DICT = GEO_DICT.sort_values(["regiao_ordem", "municipio_nome"]).reset_index(drop=True)
 
@@ -102,9 +91,8 @@ NOME_REGIAO = {int(r): n for r, n in zip(REGIOES["regiao_id"], REGIOES["regiao_n
 log.info("Dicionario pronto: %d municipios / %d regioes de saude.", len(GEO_DICT), len(REGIOES))
 
 # ------------------------------------------------- cobertura temporal --------
-_periodo = consultar("SELECT min(data_ini_se) AS ini, max(data_ini_se) AS fim FROM dengue")
-ANO_MIN = pd.Timestamp(_periodo["ini"].iloc[0]).year
-ANO_MAX = pd.Timestamp(_periodo["fim"].iloc[0]).year
+ANO_MIN = DENGUE["data_ini_se"].min().year
+ANO_MAX = DENGUE["data_ini_se"].max().year
 log.info("Cobertura temporal: %d a %d.", ANO_MIN, ANO_MAX)
 
 
@@ -132,13 +120,13 @@ class Geo:
             return 1
         return len(GEO_DICT)
 
-    def where(self) -> tuple[str, list]:
-        """Filtro SQL (+ parametros) do recorte - o equivalente de aplicar_filtro_geo()."""
+    def filtro(self) -> tuple[str | None, int | None]:
+        """(coluna, valor) do recorte - o equivalente de aplicar_filtro_geo()."""
         if self.nivel == "regiao":
-            return "regiao_id = ?", [int(self.regiao_id)]
+            return "regiao_id", int(self.regiao_id)
         if self.nivel == "municipio":
-            return "municipio_geocodigo = ?", [int(self.geocodigo)]
-        return "TRUE", []
+            return "municipio_geocodigo", int(self.geocodigo)
+        return None, None
 
 
 GEO_BASE = Geo()
@@ -148,13 +136,11 @@ GEO_BASE = Geo()
 # Uma linha por municipio/semana, nada somado entre municipios. Usada pelo
 # mapa de tendencia (quadrantes) e pela aba Analises. ~114 mil linhas: trivial
 # manter em memoria, calculada uma vez no start.
-SERIE_MUNICIPIOS = consultar("""
-    SELECT municipio_geocodigo, data_ini_se,
-           max(se) AS se, sum(casos) AS casos, max(pop) AS pop, max(rt) AS rt
-    FROM dengue
-    GROUP BY municipio_geocodigo, data_ini_se
-    ORDER BY municipio_geocodigo, data_ini_se
-""")
+_g = DENGUE.groupby(["municipio_geocodigo", "data_ini_se"])
+SERIE_MUNICIPIOS = pd.DataFrame({
+    "se": _g["se"].max(), "casos": _g["casos"].sum(min_count=1),
+    "pop": _g["pop"].max(), "rt": _g["rt"].max(),
+}).reset_index()
 SERIE_MUNICIPIOS["municipio_geocodigo"] = SERIE_MUNICIPIOS["municipio_geocodigo"].astype(int)
 SERIE_MUNICIPIOS["data_ini_se"] = pd.to_datetime(SERIE_MUNICIPIOS["data_ini_se"])
 SERIE_MUNICIPIOS["se"] = SERIE_MUNICIPIOS["se"].astype(int)
@@ -175,24 +161,19 @@ def consultar_serie_semanal(geo: Geo) -> pd.DataFrame:
     rt_peso (media de Rt ponderada por casos), n_mun, n_mun_rt1.
     Cacheada por recorte (o Geo e hashable) e compartilhada entre sessoes.
     """
-    where, params = geo.where()
-    d = consultar(f"""
-        SELECT data_ini_se,
-               max(se)                                          AS se,
-               sum(casos)                                       AS casos,
-               sum(casos_est)                                   AS casos_est,
-               sum(pop)                                         AS pop,
-               max(rt)                                          AS rt_direto,
-               sum(rt * casos)                                  AS rt_num,
-               sum(CASE WHEN rt IS NOT NULL THEN casos ELSE 0 END) AS rt_peso,
-               count(DISTINCT municipio_geocodigo)              AS n_mun,
-               sum(CASE WHEN rt > 1 THEN 1 ELSE 0 END)          AS n_mun_rt1
-        FROM dengue
-        WHERE {where}
-        GROUP BY data_ini_se
-        ORDER BY data_ini_se
-    """, params)
-    d["data_ini_se"] = pd.to_datetime(d["data_ini_se"])
+    b = filtrar(DENGUE, *geo.filtro())
+    g = b.groupby("data_ini_se")
+    d = pd.DataFrame({
+        "se":        g["se"].max(),
+        "casos":     g["casos"].sum(min_count=1),
+        "casos_est": g["casos_est"].sum(min_count=1),
+        "pop":       g["pop"].sum(min_count=1),
+        "rt_direto": g["rt"].max(),
+        "rt_num":    (b["rt"] * b["casos"]).groupby(b["data_ini_se"]).sum(min_count=1),
+        "rt_peso":   b["casos"].where(b["rt"].notna(), 0).groupby(b["data_ini_se"]).sum(),
+        "n_mun":     g["municipio_geocodigo"].nunique(),
+        "n_mun_rt1": (b["rt"] > 1).groupby(b["data_ini_se"]).sum(),
+    }).reset_index()
     d["se"] = d["se"].astype(int)
     for c in ("casos", "casos_est", "pop", "rt_direto", "rt_num", "rt_peso"):
         d[c] = d[c].astype(float)

@@ -5,7 +5,6 @@ libsass>=0.23        # compila o tema Bootstrap (ui.Theme)
 jinja2>=3.1          # tabela "Ultimas semanas" (render.table)
 pandas>=3.0
 numpy>=2.0
-duckdb>=1.5
 pyarrow>=20
 # ETL
 requests>=2.32

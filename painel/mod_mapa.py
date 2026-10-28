@@ -19,11 +19,12 @@ import json
 import time
 
 import numpy as np
+import pandas as pd
 from shiny import module, reactive, req, ui
 
 from . import config as cfg
 from .config import PALETA_DENGUE, PECAS_INCIDENCIA, RAMPA_MAPA, TONS_AZUL
-from .dados import ANO_MAX, ANO_MIN, GEO_DICT, MALHA_BASE_URL, REGIAO_DO_MUNICIPIO, consultar
+from .dados import ANO_MAX, ANO_MIN, DENGUE, GEO_DICT, MALHA_BASE_URL, REGIAO_DO_MUNICIPIO
 from .echarts import JS, output_echarts, render_echarts, toolbox_salvar
 
 
@@ -59,12 +60,9 @@ def mapa_saida(height: str = "540px"):
 
 
 def _dados_periodo(ano_ini: int, ano_fim: int):
-    d = consultar("""
-        SELECT municipio_geocodigo, sum(casos) AS casos, max(pop) AS pop
-        FROM dengue
-        WHERE data_ini_se >= ? AND data_ini_se <= ?
-        GROUP BY municipio_geocodigo
-    """, [f"{ano_ini}-01-01", f"{ano_fim}-12-31"])
+    b = DENGUE[DENGUE["data_ini_se"].between(pd.Timestamp(f"{ano_ini}-01-01"), pd.Timestamp(f"{ano_fim}-12-31"))]
+    g = b.groupby("municipio_geocodigo")
+    d = pd.DataFrame({"casos": g["casos"].sum(min_count=1), "pop": g["pop"].max()}).reset_index()
     d["municipio_geocodigo"] = d["municipio_geocodigo"].astype(int)
     # Junta com a lista completa: municipio sem notificacao continua desenhado.
     areas = GEO_DICT[["municipio_geocodigo", "municipio_nome"]].merge(

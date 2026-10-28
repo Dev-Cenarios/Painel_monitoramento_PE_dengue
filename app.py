@@ -7,7 +7,7 @@
 # Duas abas:
 #   "Painel"   - recorte geografico, KPIs, mapa | evolucao temporal, tendencia
 #                por municipio, diagrama de controle + previsao, sazonalidade,
-#                ultimas semanas / SQL.
+#                ultimas semanas.
 #   "Análises" - Epi Scanner (mapa + Top 10 por municipio, sempre PE inteiro).
 #
 # Rodar:  shiny run app.py   (ou  python -m shiny run app.py --port 8000)
@@ -20,7 +20,6 @@ from pathlib import Path
 import numpy as np
 from shiny import App, reactive, render, ui
 
-from painel import dados
 from painel.config import fmt_int, fmt_num
 from painel.dados import ANO_MAX, ANO_MIN, GEO_CACHE_DIR, GEO_DICT, consultar_serie_semanal
 from painel.mod_curva_epidemica import (curva_epidemica_controles, curva_epidemica_saida,
@@ -116,21 +115,14 @@ aba_painel = ui.nav_panel(
     # 5b. sazonalidade
     cartao_grafico("Sazonalidade — incidência por ano e semana", heatmap_saida("heatmap", height="400px"),
                    heatmap_controles("heatmap")),
-    # 6. ultimas semanas / SQL
+    # 6. ultimas semanas
     ui.navset_card_tab(
         ui.nav_panel(
             "Últimas semanas",
             ui.card_body(
                 ui.output_table("tab_serie"),
-                ui.p("Agregação feita no DuckDB sobre o Parquet; apenas as linhas exibidas chegam ao Python.",
+                ui.p("Soma semanal do recorte atual (12 semanas mais recentes da base).",
                      class_="small text-muted mb-0"),
-            ),
-        ),
-        ui.nav_panel(
-            "SQL gerado",
-            ui.card_body(
-                ui.p("Consulta enviada ao DuckDB para o recorte atual.", class_="small text-muted"),
-                ui.output_code("sql_gerado"),
             ),
         ),
         title=ui.span(ui.output_text("titulo_recorte", inline=True), class_="fw-semibold"),
@@ -221,23 +213,14 @@ def server(input, output, session):
             selected_location.set(clique_tendencia())
     epi_scanner_server("epi_scanner")
 
-    # -- ultimas semanas / SQL ----------------------------------------------------
-    @reactive.calc
-    def sql_ultimas():
-        where, params = geo().where()
-        sql = ("SELECT data_ini_se, se,\n       sum(casos) AS casos, sum(casos_est) AS casos_est,"
-               " sum(pop) AS pop\nFROM dengue\n"
-               f"WHERE {where}\nGROUP BY data_ini_se, se\nORDER BY data_ini_se DESC\nLIMIT 12")
-        return sql, params
-
+    # -- ultimas semanas ----------------------------------------------------------
     @render.text
     def titulo_recorte():
         return geo().rotulo
 
     @render.table(classes="table table-striped table-hover table-sm")
     def tab_serie():
-        sql, params = sql_ultimas()
-        d = dados.consultar(sql, params)
+        d = serie_semanal().iloc[::-1].head(12)
         inc = np.where(d["pop"] > 0, d["casos"] / d["pop"] * 1e5, np.nan)
         return d.assign(
             **{"Semana": [x.strftime("%d/%m/%Y") for x in d["data_ini_se"]],
@@ -246,13 +229,6 @@ def server(input, output, session):
                "Casos est.": [fmt_num(x, 0) for x in d["casos_est"]],
                "Inc. /100k": [fmt_num(x, 1) for x in inc]}
         )[["Semana", "SE", "Casos", "Casos est.", "Inc. /100k"]]
-
-    @render.code
-    def sql_gerado():
-        sql, params = sql_ultimas()
-        for p in params:
-            sql = sql.replace("?", str(p), 1)
-        return sql
 
 
 # Arquivos estaticos: www/ (ECharts, JS do painel) e a malha recortada.

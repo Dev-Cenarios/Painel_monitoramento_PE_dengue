@@ -14,17 +14,11 @@ chama `get_dengue_forecast()`.
 
 ## 1. Dados
 
-A série vem do mesmo Parquet do painel (`data/dengue_pe.parquet`), pela mesma
-VIEW `dengue` do DuckDB (`painel/fonte.py`, que acrescenta a Região de Saúde).
-Por recorte, uma linha por semana:
-
-```sql
-SELECT data_ini_se, max(se) AS se, sum(casos) AS casos, sum(casos_est) AS casos_est,
-       sum(pop) AS pop,
-       sum(tempmed * pop) / nullif(sum(pop), 0) AS tempmed,   -- média ponderada
-       sum(umidmed * pop) / nullif(sum(pop), 0) AS umidmed
-FROM dengue WHERE <recorte> GROUP BY data_ini_se ORDER BY data_ini_se
-```
+A série vem do mesmo Parquet do painel (`data/dengue_pe.parquet`), carregado
+em pandas por `painel/fonte.py` (que acrescenta a Região de Saúde). Por
+recorte, uma linha por semana (`fc_query_serie`): `se` = máximo; `casos`,
+`casos_est` e `pop` somados; `tempmed` e `umidmed` como média ponderada pela
+população (`sum(clima * pop) / sum(pop)`).
 
 Semanas sem registro viram `casos = 0`; população é carregada para a frente e
 o clima é interpolado.

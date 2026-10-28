@@ -1,7 +1,7 @@
 # ==============================================================================
 # Dengue PE | forecasting/get_forecast.py
 #
-# Funcao consumida pelo painel: le a serie do recorte via DuckDB, aplica o
+# Funcao consumida pelo painel: le a serie do recorte (pandas), aplica o
 # ensemble treinado (forecasting/models/) e devolve observado + previsto,
 # respeitando o ano sanitario. Porto do get_forecast.R do RIDE.
 #
@@ -41,7 +41,7 @@ def forecast_disponivel(models_dir: Path | None = None) -> bool:
 
 def get_dengue_forecast(location_id=None, data_atual: date | None = None, horizon: int | None = None,
                         semanas_recentes: int | None = None, n_semanas_hist: int | None = 104,
-                        models_dir: Path | None = None, con=None, log=print) -> pd.DataFrame:
+                        models_dir: Path | None = None, base=None, log=print) -> pd.DataFrame:
     """Previsao de casos por recorte (ensemble em dois niveis).
 
     Colunas: Data_SE, SE, Semana_Epi, Ano_Sanitario, Temporada, Tipo
@@ -61,16 +61,11 @@ def get_dengue_forecast(location_id=None, data_atual: date | None = None, horizo
         raise RuntimeError("Modelos nao treinados: rode `python forecasting/train_models.py`.")
     pesos = cfg_json["weights"]
 
-    proprio = con is None
-    if proprio:
-        con = U.fc_connect()
-    try:
-        geo = U.fc_resolve_geo(location_id)
-        d_all = U.fc_prepare(U.fc_query_serie(con, geo))
-        fp_ok = U.fc_fingerprint_ok(cfg_json.get("parquet_fingerprint"), U.fc_fingerprint(con))
-    finally:
-        if proprio:
-            con.close()
+    if base is None:
+        base = U.fc_carregar()
+    geo = U.fc_resolve_geo(location_id)
+    d_all = U.fc_prepare(U.fc_query_serie(base, geo))
+    fp_ok = U.fc_fingerprint_ok(cfg_json.get("parquet_fingerprint"), U.fc_fingerprint(base))
 
     data_atual = pd.Timestamp(data_atual or date.today())
     d_obs = d_all[d_all["data_ini_se"] <= data_atual].reset_index(drop=True)

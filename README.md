@@ -6,7 +6,7 @@ transmissão está crescendo, se a temporada atual está acima do esperado e tra
 uma **previsão de casos** até o fim da temporada.
 
 Feito em **Python + Shiny for Python**, com gráficos em **ECharts** e dados
-servidos via **DuckDB** sobre um único arquivo **Parquet**. É a versão para PE
+lidos com **pandas** de um único arquivo **Parquet**. É a versão para PE
 do painel [Monitoramento RIDE-DF](https://github.com/InVictorLopes/Dengue_monitoramento_ride)
 (R + Shiny): mesmas visualizações, mesma metodologia, mesma identidade visual.
 
@@ -46,7 +46,7 @@ mapa também aplica o recorte.
 | **Rt — Tendência por município (quadrantes)** | Compara **todos** os municípios: quais estão acima do normal para a época **e** crescendo. Ignora o recorte de propósito. |
 | **Diagrama de controle & previsão** | Incidência da temporada contra o canal endêmico (quartis), com a previsão de casos até o fim da temporada. |
 | **Sazonalidade** | Mapa de calor ano × semana. |
-| **Últimas semanas / SQL gerado** | Tabela das últimas semanas e a consulta usada. |
+| **Últimas semanas** | Tabela das 12 semanas mais recentes do recorte. |
 
 **Aba "Análises" (Epi Scanner)** — compara os municípios de PE entre si:
 semanas com Rt > 1, Rt máximo do ano mais recente e casos acumulados desde 2015.
@@ -188,7 +188,7 @@ dengue_pe/
 ├── requirements.txt
 ├── painel/
 │   ├── config.py              # Caminhos, paleta Cenários, escala de incidência, ano sanitário
-│   ├── fonte.py               # VIEW `dengue` do DuckDB (Parquet + Região de Saúde)
+│   ├── fonte.py               # Base `dengue` em pandas (Parquet + Região de Saúde)
 │   ├── dados.py               # Dicionário geográfico, série por município, malhas, consultas
 │   ├── echarts.py             # Saída ECharts para o Shiny (o papel do echarts4r)
 │   ├── ui_utils.py            # Tema e cards
@@ -286,4 +286,4 @@ Exemplo semanal (segunda-feira, 3h), com `crontab -e` no servidor:
 - **Temporada padrão** (diagrama e curva): a da última semana com dados.
 
 ---
-Desenvolvido com Python + Shiny for Python + ECharts + DuckDB
+Desenvolvido com Python + Shiny for Python + ECharts + pandas

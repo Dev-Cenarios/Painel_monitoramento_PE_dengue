@@ -29,6 +29,7 @@ import time
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -133,16 +134,18 @@ def consolidar(bt: pd.DataFrame, d: pd.DataFrame) -> dict:
             "rmse": {"modelo": rmse_mod, "classe": rmse_cl}, "escala_sazonal": escala}
 
 
+@lru_cache(maxsize=1)
+def _base_processo() -> pd.DataFrame:
+    """Base lida uma vez por processo filho (cada um atende varios recortes)."""
+    return U.fc_carregar()
+
+
 def specs_do_recorte(loc) -> tuple[str, dict | None, str]:
     """Escolhe as specs dos modelos `cacheavel` no corte de treino do recorte (roda num processo filho)."""
     warnings.filterwarnings("ignore")
-    con = U.fc_connect()
     geo = U.fc_resolve_geo(loc)
     chave = U.fc_cache_key(geo)
-    try:
-        d = U.fc_prepare(U.fc_query_serie(con, geo))
-    finally:
-        con.close()
+    d = U.fc_prepare(U.fc_query_serie(_base_processo(), geo))
     if len(d) < U.FC_MIN_SEMANAS:
         return chave, None, f"serie curta ({len(d)} semanas) - reajuste ao vivo"
     d_fit = U.fc_corte_treino(d)
@@ -210,15 +213,12 @@ def main() -> None:
     t0 = time.time()
 
     print("\n== 1. Base historica (Pernambuco agregado) ==")
-    con = U.fc_connect()
-    fp = U.fc_fingerprint(con)
+    base = U.fc_carregar()
+    fp = U.fc_fingerprint(base)
     geo = U.fc_resolve_geo(None)
-    d = U.fc_prepare(U.fc_query_serie(con, geo))
-    recortes = con.execute("""
-        SELECT DISTINCT regiao_id, municipio_geocodigo FROM dengue
-        WHERE municipio_geocodigo IS NOT NULL
-    """).df()
-    con.close()
+    d = U.fc_prepare(U.fc_query_serie(base, geo))
+    recortes = (base.loc[base["municipio_geocodigo"].notna(), ["regiao_id", "municipio_geocodigo"]]
+                .drop_duplicates())
     print(f"   {len(d)} semanas | {d['data_ini_se'].min():%Y-%m-%d} a {d['data_ini_se'].max():%Y-%m-%d} "
           f"| {int(d['casos'].sum())} casos")
 

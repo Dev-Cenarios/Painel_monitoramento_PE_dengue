@@ -37,7 +37,7 @@ from shiny import module, reactive, render, req, ui
 from . import config as cfg
 from .config import (FONTE_GRAFICO, NIVEIS_SEMANA_SANITARIA, PALETA_DENGUE, SEMANA_CORTE_SANITARIA,
                      SERIES_CENARIOS, TONS_AZUL, TONS_DENGUE, fmt_num, rotulo_ano_sanitario)
-from .dados import ANO_MAX, ANO_MIN, VERSAO_DADOS, Geo
+from .dados import ANO_MAX, ANO_MIN, DENGUE, VERSAO_DADOS, Geo
 from .echarts import JS, lista, mensagem, output_echarts, render_echarts, toolbox_salvar
 from .mod_curva_epidemica import escolhas_temporada, serie_por_temporada, temporada_padrao
 
@@ -135,7 +135,7 @@ def previsao_cacheada(geo: Geo) -> pd.DataFrame | None:
             pass
     t0 = time.time()
     try:
-        fc = _gf.get_dengue_forecast(geo, n_semanas_hist=0, log=log.info)
+        fc = _gf.get_dengue_forecast(geo, n_semanas_hist=0, base=DENGUE, log=log.info)
     except Exception as e:  # noqa: BLE001
         log.warning("[diagrama] previsao indisponivel (%s): %s", geo.rotulo, e)
         return None

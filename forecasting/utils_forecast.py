@@ -41,7 +41,7 @@ if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
 from painel import config as cfg  # noqa: E402
-from painel.fonte import conectar  # noqa: E402
+from painel.fonte import carregar, filtrar  # noqa: E402
 
 try:  # opcional: liga a classe "machine learning"
     from sklearn.ensemble import RandomForestRegressor
@@ -116,15 +116,14 @@ def fc_corte_treino(d_obs: pd.DataFrame, n_recentes: int = FC_SEMANAS_RECENTES) 
 # ============================================================================
 # 1. FONTE DE DADOS
 # ============================================================================
-def fc_connect(parquet: Path | None = None):
-    return conectar(parquet)
+def fc_carregar(parquet: Path | None = None) -> pd.DataFrame:
+    return carregar(parquet)
 
 
-def fc_fingerprint(con, parquet: Path | None = None) -> dict:
+def fc_fingerprint(base: pd.DataFrame, parquet: Path | None = None) -> dict:
     """Impressao digital do Parquet. So bytes + linhas decidem a validade (mtime nao)."""
     p = Path(parquet or cfg.PARQUET_DENGUE)
-    return {"arquivo": p.name, "bytes": p.stat().st_size,
-            "nrow": int(con.execute("SELECT count(*) FROM dengue").fetchone()[0])}
+    return {"arquivo": p.name, "bytes": p.stat().st_size, "nrow": len(base)}
 
 
 def fc_fingerprint_ok(a: dict | None, b: dict | None) -> bool:
@@ -132,9 +131,9 @@ def fc_fingerprint_ok(a: dict | None, b: dict | None) -> bool:
 
 
 def fc_resolve_geo(location_id) -> dict:
-    """location_id -> filtro SQL. None/"base" = Pernambuco; 5 digitos = Regiao de
+    """location_id -> filtro (coluna, valor). None/"base" = Pernambuco; 5 digitos = Regiao de
     Saude (regiao_id, ex. 26010); 7 digitos = municipio. Aceita o dados.Geo do app."""
-    base = {"nivel": "base", "where": "TRUE", "params": [], "rotulo": cfg.ROTULO_BASE, "id": None}
+    base = {"nivel": "base", "coluna": None, "valor": None, "rotulo": cfg.ROTULO_BASE, "id": None}
     if location_id is None:
         return base
     if hasattr(location_id, "nivel"):          # painel.dados.Geo
@@ -146,10 +145,10 @@ def fc_resolve_geo(location_id) -> dict:
         return base
     x = int(location_id)
     if x >= 1_000_000:
-        return {"nivel": "municipio", "where": "municipio_geocodigo = ?", "params": [x],
+        return {"nivel": "municipio", "coluna": "municipio_geocodigo", "valor": x,
                 "rotulo": f"Municipio {x}", "id": x}
     if 10_000 <= x < 100_000:
-        return {"nivel": "regiao", "where": "regiao_id = ?", "params": [x],
+        return {"nivel": "regiao", "coluna": "regiao_id", "valor": x,
                 "rotulo": f"Regiao de Saude {x}", "id": x}
     raise ValueError(f"location_id fora do padrao (5 ou 7 digitos): {x}")
 
@@ -158,22 +157,21 @@ def fc_cache_key(geo: dict) -> str:
     return {"base": "base", "regiao": f"reg_{geo['id']}", "municipio": f"mun_{geo['id']}"}[geo["nivel"]]
 
 
-def fc_query_serie(con, geo: dict) -> pd.DataFrame:
+def fc_query_serie(base: pd.DataFrame, geo: dict) -> pd.DataFrame:
     """Serie semanal do recorte: casos/pop somam; clima e media ponderada pela populacao."""
-    d = con.execute(f"""
-        SELECT data_ini_se,
-               max(se)                                  AS se,
-               sum(casos)                               AS casos,
-               sum(casos_est)                           AS casos_est,
-               sum(pop)                                 AS pop,
-               sum(tempmed * pop) / nullif(sum(pop), 0) AS tempmed,
-               sum(umidmed * pop) / nullif(sum(pop), 0) AS umidmed
-        FROM dengue
-        WHERE {geo['where']}
-        GROUP BY data_ini_se
-        ORDER BY data_ini_se
-    """, geo["params"]).df()
-    d["data_ini_se"] = pd.to_datetime(d["data_ini_se"])
+    b = filtrar(base, geo["coluna"], geo["valor"])
+    g = b.groupby("data_ini_se")
+    semana = b["data_ini_se"]
+    pop = g["pop"].sum(min_count=1)
+    pop_ok = pop.where(pop != 0)
+    d = pd.DataFrame({
+        "se":        g["se"].max(),
+        "casos":     g["casos"].sum(min_count=1),
+        "casos_est": g["casos_est"].sum(min_count=1),
+        "pop":       pop,
+        "tempmed":   (b["tempmed"] * b["pop"]).groupby(semana).sum(min_count=1) / pop_ok,
+        "umidmed":   (b["umidmed"] * b["pop"]).groupby(semana).sum(min_count=1) / pop_ok,
+    }).reset_index()
     for c in ("casos", "casos_est", "pop", "tempmed", "umidmed"):
         d[c] = d[c].astype(float)
     return d
