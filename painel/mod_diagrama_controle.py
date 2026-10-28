@@ -182,7 +182,7 @@ def diagrama_controle_painel():
                         selected=temporada_padrao()),
         ui.input_checkbox("nowcast", ui.tags.span("Mostrar linha de nowcast ",
                                                   ui.tags.small("(casos_est)", class_="text-muted")),
-                          value=False),
+                          value=True),
         ui.output_ui("nota_referencia"),
         bloco_prev,
     )
