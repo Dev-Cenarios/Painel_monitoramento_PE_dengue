@@ -1,0 +1,10 @@
+services:
+  painel:
+    build: .
+    container_name: denguepe
+    restart: unless-stopped
+    ports:
+      - "${PORTA:?defina PORTA no .env}:8000"
+    volumes:
+      # Dados fora da imagem: depois do ETL basta `docker compose restart`.
+      - ./data:/app/data:ro

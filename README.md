@@ -23,7 +23,7 @@ do painel [Monitoramento RIDE-DF](https://github.com/InVictorLopes/Dengue_monito
 4. [Ordem de execução dos scripts](#4-ordem-de-execução-dos-scripts)
 5. [Metodologia](#5-metodologia)
 6. [Estrutura do projeto](#6-estrutura-do-projeto)
-7. [Publicação no Shiny Server](#7-publicação-no-shiny-server)
+7. [Publicação](#7-publicação)
 8. [Atualização automática (cron)](#8-atualização-automática-cron)
 9. [Solução de problemas](#9-solução-de-problemas)
 10. [Diferenças em relação ao painel RIDE-DF](#10-diferenças-em-relação-ao-painel-ride-df)
@@ -209,6 +209,7 @@ dengue_pe/
 │   ├── dengue_pe.parquet
 │   ├── regioes_saude_pe.csv
 │   └── geo/MUN_26.geojson
+├── Dockerfile, docker-compose.yml # Container da VM Cenários (seção 7.1)
 └── deploy/shiny-server.conf   # Bloco de exemplo para o Shiny Server
 ```
 
@@ -222,7 +223,28 @@ tabela de regiões (`prep/00_regioes_saude.py`) e a malha em `data/geo/`.
 
 ---
 
-## 7. Publicação no Shiny Server
+## 7. Publicação
+
+### 7.1 No Cenários (Docker) — produção atual
+
+Publicado em `https://painel.cenarios.unb.br/cenarios/denguepe/`, na VM
+`wrdocker2`, seguindo o guia da VM dos painéis: pasta `~/denguepe`, container
+`denguepe`, porta **8512**. O app roda na raiz do container e o nginx corta o
+prefixo (`location /cenarios/denguepe/` + `proxy_pass http://localhost:8512/;`,
+com barra nos dois).
+
+```bash
+printf "PORTA=8512\n" > .env          # fora do git; o compose recusa subir sem ele
+sudo docker compose up -d --build
+curl -sI http://localhost:8512/ | head -1
+```
+
+`data/` não entra na imagem: é montado pelo compose. Depois de atualizar os
+dados basta `sudo docker compose restart`; depois de código novo,
+`git pull && sudo docker compose up -d --build`. A previsão é treinada no
+host (`forecasting/train_models.py`) e entra na imagem no próximo `--build`.
+
+### 7.2 No Shiny Server
 
 O Shiny Server (open source) roda apps Python nas versões recentes, desde que
 o bloco `location` diga qual Python usar.
