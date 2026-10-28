@@ -23,11 +23,15 @@ def heatmap_controles():
     return ui.TagList(
         ui.input_slider("anos", "Anos exibidos", min=ANO_MIN, max=ANO_MAX,
                         value=(max(ANO_MIN, ANO_MAX - 9), ANO_MAX), step=1, sep=""),
+        # Padrao continuo: as faixas do MS sao para incidencia ACUMULADA no ano, e
+        # a semanal de PE quase nunca passa de 100/100 mil - com faixas, tudo
+        # cairia em "< 100" (heatmap inteiro numa cor so).
         ui.input_radio_buttons("escala", "Escala de cor",
-                               choices={"faixas": "Faixas do MS", "continua": "Contínua"},
-                               selected="faixas", inline=True),
+                               choices={"continua": "Contínua", "faixas": "Faixas do MS"},
+                               selected="continua", inline=True),
         ui.help_text(ui.tags.small(
-            "As faixas do MS são as mesmas do mapa coroplético, o que permite comparar as duas visões."
+            "As faixas do MS se referem à incidência acumulada no ano; aqui cada célula é uma "
+            "semana, então quase todas ficam abaixo de 100 por 100 mil."
         )),
     )
 
