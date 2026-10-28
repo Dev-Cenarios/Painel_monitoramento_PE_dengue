@@ -261,10 +261,10 @@ GEO_CACHE_DIR = _dir_cache_geo()
 
 
 # Fernando de Noronha fica ~350 km mar adentro: no enquadramento real ele
-# achataria o continente. Vira um encarte ampliado (3x) na costa, a leste do
+# achataria o continente. Vira um encarte ampliado (12x) na costa, a leste do
 # Recife - convencao comum nos mapas de PE. So muda o desenho, nao o dado.
 NORONHA = "2605459"
-ENCARTE_NORONHA = {"centro": (-34.25, -7.55), "escala": 3.0}
+ENCARTE_NORONHA = {"centro": (-34.25, -7.75), "escala": 12.0}
 
 
 def _mover_noronha(feicao: dict) -> dict:
