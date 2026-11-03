@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+
 from htmltools import Tag, TagList, head_content, tags
 from shiny import ui
 
@@ -59,6 +62,12 @@ TEMA = (
 )
 
 
+# Versao do JS do painel no endereco (?v=...): muda quando o arquivo muda, e o
+# navegador nao fica com uma copia antiga em cache depois de um deploy.
+_JS_PAINEL = Path(__file__).resolve().parent.parent / "www" / "dengue.js"
+VERSAO_JS = hashlib.md5(_JS_PAINEL.read_bytes()).hexdigest()[:10]
+
+
 def assets() -> TagList:
     """Fontes, ECharts (local, www/) e o JS do painel - injetados uma vez no topo."""
     return head_content(
@@ -69,7 +78,7 @@ def assets() -> TagList:
                  "&family=Poppins:wght@600;700&display=swap",
         ),
         tags.script(src="static/echarts.min.js"),
-        tags.script(src="static/dengue.js"),
+        tags.script(src=f"static/dengue.js?v={VERSAO_JS}"),
     )
 
 

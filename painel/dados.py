@@ -261,10 +261,10 @@ GEO_CACHE_DIR = _dir_cache_geo()
 
 
 # Fernando de Noronha fica ~350 km mar adentro: no enquadramento real ele
-# achataria o continente. Vira um encarte ampliado (12x) na costa, a leste do
+# achataria o continente. Vira um encarte ampliado (9x) na costa, a leste do
 # Recife - convencao comum nos mapas de PE. So muda o desenho, nao o dado.
 NORONHA = "2605459"
-ENCARTE_NORONHA = {"centro": (-34.25, -7.75), "escala": 12.0}
+ENCARTE_NORONHA = {"centro": (-34.3, -7.75), "escala": 9.0}
 
 
 def _mover_noronha(feicao: dict) -> dict:
@@ -286,13 +286,28 @@ def _mover_noronha(feicao: dict) -> dict:
     return {**feicao, "geometry": {**geom, "coordinates": mover(geom["coordinates"])}}
 
 
+# Contorno do estado (gerado por prep/01_contorno_pe.R), juntado ao FIM da
+# malha: a feicao extra e desenhada por ultimo, por cima dos municipios, e por
+# ser parte do mesmo mapa acompanha zoom e arraste. Os mapas a desenham so
+# como borda (mod_mapa.itens_contorno). Opcional: sem o arquivo, o mapa sai
+# so com as bordas dos municipios.
+CONTORNO_ARQUIVO = cfg.GEO_DIR / "contorno_pe.geojson"
+
+
+def _feicoes_contorno() -> list[dict]:
+    if not CONTORNO_ARQUIVO.exists():
+        return []
+    js = json.loads(CONTORNO_ARQUIVO.read_text(encoding="utf-8"))
+    return [f for f in js["features"] if isinstance(f["properties"].get(cfg.GEO_NAME_PROPERTY), str)]
+
+
 def preparar_malhas_base() -> str:
     """Grava BASE_MUN.json e devolve o nome do arquivo com a versao (cache-busting)."""
     ufs = sorted(GEO_DICT["uf_ibge"].dropna().astype(int).unique())
     fontes = [cfg.GEO_DIR / f"MUN_{uf}.geojson" for uf in ufs]
     impressao = json.dumps({
         "geocodigos": sorted(GEO_DICT["municipio_geocodigo"].tolist()),
-        "bytes": [f.stat().st_size if f.exists() else None for f in fontes],
+        "bytes": [f.stat().st_size if f.exists() else None for f in fontes + [CONTORNO_ARQUIVO]],
         "encarte": ENCARTE_NORONHA,
     })
     versao = hashlib.md5(impressao.encode()).hexdigest()[:10]
@@ -315,6 +330,7 @@ def preparar_malhas_base() -> str:
         log.warning("%d de %d municipios sem poligono. O mapa ficara incompleto.",
                     len(GEO_DICT) - len(feicoes), len(GEO_DICT))
     tmp = destino.with_suffix(".tmp")
+    feicoes += _feicoes_contorno()
     tmp.write_text(json.dumps({"type": "FeatureCollection", "features": feicoes}), encoding="utf-8")
     tmp.replace(destino)
     log.info("Malhas recortadas: %d municipios -> %s", len(feicoes), destino)
@@ -322,6 +338,7 @@ def preparar_malhas_base() -> str:
 
 
 MALHA_BASE_ARQUIVO = preparar_malhas_base()
+CODIGOS_CONTORNO = [f["properties"][cfg.GEO_NAME_PROPERTY] for f in _feicoes_contorno()]
 MALHA_BASE_URL = f"geo/{MALHA_BASE_ARQUIVO}"
 
 

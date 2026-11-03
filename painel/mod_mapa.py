@@ -11,6 +11,10 @@
 #
 # Contrato de saida: reactive.value com None ou dict(nivel, regiao_id,
 # geocodigo[, nonce]) - pedido de foco para o filtro global.
+#
+# BORDAS: municipios em cinza claro e, por cima, o contorno do estado
+# (CODIGOS_CONTORNO, em painel/dados.py) - sem isso, municipio na cor mais
+# clara da escala some no fundo branco do card.
 # ==============================================================================
 
 from __future__ import annotations
@@ -24,8 +28,31 @@ from shiny import module, reactive, req, ui
 
 from . import config as cfg
 from .config import PALETA_DENGUE, PECAS_INCIDENCIA, RAMPA_MAPA, TONS_AZUL
-from .dados import ANO_MAX, ANO_MIN, DENGUE, GEO_DICT, MALHA_BASE_URL, REGIAO_DO_MUNICIPIO
+from .dados import (ANO_MAX, ANO_MIN, CODIGOS_CONTORNO, DENGUE, GEO_DICT, MALHA_BASE_URL,
+                    REGIAO_DO_MUNICIPIO)
 from .echarts import JS, output_echarts, render_echarts, toolbox_salvar
+
+
+COR_BORDA_MUN = "#CBD5DB"   # entre municipios
+COR_BORDA_UF = "#94A3AC"    # contorno do estado
+
+
+def itens_contorno() -> list[dict]:
+    """Itens de dado do contorno do estado (fim da malha BASE_MUN).
+
+    Sem valor (o visualMap os ignora), sem preenchimento e `silent` (clique,
+    hover e tooltip atravessam para o municipio de baixo) - so a borda.
+    opacity = 1 no proprio item: o destaque (dengue_map_highlight) baixa a
+    opacidade da serie inteira, e o contorno deve continuar visivel. Todo mapa
+    que usa BASE_MUN precisa deles: sem os itens, a feicao do contorno seria
+    pintada por cima de tudo.
+    """
+    return [{"name": c,
+             "itemStyle": {"areaColor": "none", "opacity": 1,
+                           "borderColor": COR_BORDA_UF, "borderWidth": 1.2},
+             "emphasis": {"disabled": True}, "select": {"disabled": True},
+             "tooltip": {"show": False}, "silent": True}
+            for c in CODIGOS_CONTORNO]
 
 
 @module.ui
@@ -126,7 +153,7 @@ def mapa_server(input, output, session, selected_location):
                 "name": rotulo,
                 "nameProperty": cfg.GEO_NAME_PROPERTY,
                 "roam": True,
-                "itemStyle": {"borderColor": "#FFFFFF", "borderWidth": 0.4},
+                "itemStyle": {"borderColor": COR_BORDA_MUN, "borderWidth": 0.6},
                 # Sem isto o ECharts desenha o "nome" interno (o codigo IBGE) ao
                 # passar o mouse, mesmo com o tooltip ja resolvendo o nome.
                 "label": {"show": False},
@@ -134,7 +161,8 @@ def mapa_server(input, output, session, selected_location):
                 "selectedMode": "single",
                 "select": {"itemStyle": {"areaColor": PALETA_DENGUE["azul_acao"], "opacity": 1},
                            "label": {"show": False}},
-                "data": [{"name": c, "value": v} for c, v in zip(d["chave"], d["valor"])],
+                "data": [{"name": c, "value": v} for c, v in zip(d["chave"], d["valor"])]
+                        + itens_contorno(),
             }],
         }
 

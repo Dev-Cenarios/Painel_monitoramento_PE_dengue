@@ -23,6 +23,7 @@ from .config import FONTE_GRAFICO, RAMPA_MAPA, TONS_AZUL, fmt_int, fmt_num
 from . import config as cfg
 from .dados import ANO_MAX, GEO_DICT, MALHA_BASE_URL, SERIE_MUNICIPIOS
 from .echarts import JS, output_echarts, render_echarts, toolbox_salvar
+from .mod_mapa import COR_BORDA_MUN, itens_contorno
 from .ui_utils import cartao_grafico
 
 ROTULOS = {
@@ -112,10 +113,11 @@ def epi_scanner_server(input, output, session):
             "series": [{
                 "type": "map", "map": "BASE_MUN", "name": rotulo,
                 "nameProperty": cfg.GEO_NAME_PROPERTY, "roam": True,
-                "itemStyle": {"borderColor": "#FFFFFF", "borderWidth": 0.4},
+                "itemStyle": {"borderColor": COR_BORDA_MUN, "borderWidth": 0.6},
                 "label": {"show": False},
                 "emphasis": {"itemStyle": {"areaColor": TONS_AZUL["300"]}, "label": {"show": False}},
-                "data": [{"name": c, "value": v} for c, v in zip(d["chave"], d["valor"])],
+                "data": [{"name": c, "value": v} for c, v in zip(d["chave"], d["valor"])]
+                        + itens_contorno(),
             }],
         }
 

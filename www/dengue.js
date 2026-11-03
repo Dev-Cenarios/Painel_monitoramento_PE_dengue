@@ -77,7 +77,23 @@
 
       var aplicar = function () {
         var chart = instancia(el) || echarts.init(alvo, null, { renderer: 'canvas' });
+        // Contorno do estado (itens_contorno em painel/mod_mapa.py): area sem
+        // preenchimento, so borda. O ECharts 5.5 ignora `silent` no item de
+        // dado e a area capturaria clique/hover do municipio de baixo, entao
+        // ela e marcada como silent aqui - logo apos o setOption e a cada
+        // render seguinte (o zrender recria os elementos quando o destaque
+        // reaplica o option).
+        var silenciarContorno = function () {
+          chart.getZr().storage.getDisplayList().forEach(function (e) {
+            if (e.style && e.style.fill === 'none' && !e.silent) e.silent = true;
+          });
+        };
+        chart.off('rendered');
         chart.setOption(opcao, true);   // notMerge: o option e sempre completo
+        if (mapa) {
+          silenciarContorno();
+          chart.on('rendered', silenciarContorno);
+        }
         chart.off('click');
         if (clique) {
           // setTimeout: tira o setInputValue de dentro do evento do zrender,
