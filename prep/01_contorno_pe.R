@@ -5,7 +5,7 @@
 # nao "sumir" no fundo branco quando os municipios estao na cor mais clara.
 #
 # Fernando de Noronha fica de fora: no mapa ele e um encarte deslocado
-# (ENCARTE_NORONHA em painel/dados.py), entao o contorno real dele cairia no
+# (quadro de detalhe, NORONHA em painel/dados.py), entao o contorno real dele cairia no
 # mar, longe do desenho.
 #
 # Em R porque o ambiente Python do painel nao tem shapely/geopandas, e isto

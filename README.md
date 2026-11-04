@@ -39,7 +39,7 @@ mapa também aplica o recorte.
 | Visualização | O que responde |
 |---|---|
 | **Indicadores (KPIs)** | Casos no ano mais recente, incidência da última semana, Rt da última semana com estimativa e abrangência do recorte. A cor escurece conforme a situação piora. |
-| **Distribuição espacial** | Mapa de incidência (ou casos) por município no período escolhido. Fernando de Noronha aparece como encarte ampliado na costa. |
+| **Distribuição espacial** | Mapa de incidência (ou casos) por município no período escolhido. Fernando de Noronha aparece num quadro de detalhe a leste do Recife (ampliado 4×, moldura tracejada), no padrão dos mapas de PE da equipe. |
 | **Série** | Casos notificados × estimados (nowcast), por semana ou mês, em casos ou incidência. |
 | **Curva epidêmica** | Casos da temporada em análise contra o volume histórico de cada semana. |
 | **Rt (InfoDengue)** | Número de reprodução efetivo estimado pelo InfoDengue; acima de 1 = expansão. |
@@ -301,8 +301,11 @@ Exemplo semanal (segunda-feira, 3h), com `crontab -e` no servidor:
 - **Previsão**: mesmos modelos e regras, reimplementados com statsmodels e
   scikit-learn — ver a seção 3 do
   [`README-FORECAST.md`](forecasting/README-FORECAST.md).
-- **Mapa**: Fernando de Noronha como encarte ampliado (no enquadramento real
-  ele achataria o continente).
+- **Mapa**: Fernando de Noronha num quadro de detalhe (no enquadramento real
+  ele vira um pontinho), com os mesmos parâmetros do modelo da equipe
+  (`noronha_quadro_detalhe.R`, painel de Hanseníase PE): centro do quadro em
+  -34,05 / -8,40, ampliação 4×, moldura tracejada e nome embaixo. Só o
+  desenho muda; os cálculos usam o código do município.
 - **Tendência por município**: rótulos que se sobrepõem são escondidos (são 185
   pontos, contra 34 no RIDE-DF).
 - **Temporada padrão** (diagrama e curva): a da última semana com dados.

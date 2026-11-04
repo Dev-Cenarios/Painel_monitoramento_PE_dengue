@@ -28,13 +28,15 @@ from shiny import module, reactive, req, ui
 
 from . import config as cfg
 from .config import PALETA_DENGUE, PECAS_INCIDENCIA, RAMPA_MAPA, TONS_AZUL
-from .dados import (ANO_MAX, ANO_MIN, CODIGOS_CONTORNO, DENGUE, GEO_DICT, MALHA_BASE_URL,
-                    REGIAO_DO_MUNICIPIO)
+from .dados import (ANO_MAX, ANO_MIN, CODIGO_QUADRO_NORONHA, CODIGO_ROTULO_NORONHA, CODIGOS_CONTORNO,
+                    DENGUE, GEO_DICT, MALHA_BASE_URL, REGIAO_DO_MUNICIPIO)
 from .echarts import JS, output_echarts, render_echarts, toolbox_salvar
 
 
 COR_BORDA_MUN = "#CBD5DB"   # entre municipios
 COR_BORDA_UF = "#94A3AC"    # contorno do estado
+COR_QUADRO_NORONHA = "#7A8B95"   # moldura tracejada do quadro de Noronha
+COR_NOME_NORONHA = "#4A4A4A"     # nome sob o quadro
 
 
 def itens_contorno() -> list[dict]:
@@ -47,12 +49,24 @@ def itens_contorno() -> list[dict]:
     que usa BASE_MUN precisa deles: sem os itens, a feicao do contorno seria
     pintada por cima de tudo.
     """
-    return [{"name": c,
-             "itemStyle": {"areaColor": "none", "opacity": 1,
-                           "borderColor": COR_BORDA_UF, "borderWidth": 1.2},
-             "emphasis": {"disabled": True}, "select": {"disabled": True},
-             "tooltip": {"show": False}, "silent": True}
-            for c in CODIGOS_CONTORNO]
+    so_borda = {"emphasis": {"disabled": True}, "select": {"disabled": True},
+                "tooltip": {"show": False}, "silent": True}
+    itens = [{"name": c, **so_borda,
+              "itemStyle": {"areaColor": "none", "opacity": 1,
+                            "borderColor": COR_BORDA_UF, "borderWidth": 1.2}}
+             for c in CODIGOS_CONTORNO]
+    # Quadro de detalhe de Fernando de Noronha (painel/dados.py): moldura
+    # tracejada e o nome centralizado embaixo dela, no padrao da equipe.
+    itens += [
+        {"name": CODIGO_QUADRO_NORONHA, **so_borda,
+         "itemStyle": {"areaColor": "none", "opacity": 1, "borderColor": COR_QUADRO_NORONHA,
+                       "borderWidth": 1.2, "borderType": [4, 3]}},
+        {"name": CODIGO_ROTULO_NORONHA, **so_borda,
+         "itemStyle": {"areaColor": "none", "opacity": 1, "borderWidth": 0},
+         "label": {"show": True, "formatter": "Fernando de Noronha", "color": COR_NOME_NORONHA,
+                   "fontWeight": "bold", "fontSize": 11}},
+    ]
+    return itens
 
 
 @module.ui

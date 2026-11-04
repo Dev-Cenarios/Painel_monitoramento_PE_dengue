@@ -260,30 +260,81 @@ def _dir_cache_geo() -> Path:
 GEO_CACHE_DIR = _dir_cache_geo()
 
 
-# Fernando de Noronha fica ~350 km mar adentro: no enquadramento real ele
-# achataria o continente. Vira um encarte ampliado (9x) na costa, a leste do
-# Recife - convencao comum nos mapas de PE. So muda o desenho, nao o dado.
-NORONHA = "2605459"
-ENCARTE_NORONHA = {"centro": (-34.3, -7.75), "escala": 9.0}
+# Fernando de Noronha: quadro de detalhe, no padrao da equipe (Programa
+# Cenarios, mesmo do painel SINAN Territorios - Hanseniase PE; modelo em R:
+# noronha_quadro_detalhe.R). O arquipelago fica a ~550 km da costa e no
+# enquadramento do estado vira um pontinho. So no DESENHO, o que esta dentro
+# da caixa do arquipelago e levado para um quadro no mar, a leste do Recife,
+# ampliado 4x em cada direcao. O dado nao muda: os calculos usam o codigo do
+# municipio, nunca a geometria deslocada.
+NORONHA = {
+    "codigo_ibge": "2605459",
+    # Caixa do arquipelago real (graus), com folga: o que cai dentro vai pro quadro
+    "caixa": {"xmin": -32.55, "ymin": -3.95, "xmax": -32.30, "ymax": -3.74},
+    # Ponto do arquipelago que vira o centro do quadro
+    "centro": (-32.4267, -3.8430),
+    # Centro do quadro de detalhe: no mar, a leste do Recife
+    "destino": (-34.05, -8.40),
+    # Ampliacao linear (4x em cada direcao, 16x em area)
+    "escala": 4.0,
+    # Margem do quadro em volta da ilha deslocada (graus)
+    "margem": 0.1,
+}
+CODIGO_QUADRO_NORONHA = "QUADRO_NORONHA"
+CODIGO_ROTULO_NORONHA = "ROTULO_NORONHA"
 
 
-def _mover_noronha(feicao: dict) -> dict:
-    geom = feicao["geometry"]
+def _no_arquipelago(x: float, y: float) -> bool:
+    c = NORONHA["caixa"]
+    return c["xmin"] <= x <= c["xmax"] and c["ymin"] <= y <= c["ymax"]
 
+
+def _desloca_xy(x: float, y: float) -> list[float]:
+    (cx, cy), (dx, dy), k = NORONHA["centro"], NORONHA["destino"], NORONHA["escala"]
+    return [dx + k * (x - cx), dy + k * (y - cy)]
+
+
+def _desloca_geometria(geom: dict) -> dict:
+    """Desloca so os aneis (ou pontos) que estao INTEIROS no arquipelago."""
+    def anel(c):
+        if isinstance(c[0], (int, float)):        # um ponto
+            return _desloca_xy(*c) if _no_arquipelago(*c[:2]) else c
+        if isinstance(c[0][0], (int, float)):     # um anel / linha
+            return [_desloca_xy(*p) for p in c] if all(_no_arquipelago(*p[:2]) for p in c) else c
+        return [anel(x) for x in c]
+    return {**geom, "coordinates": anel(geom["coordinates"])}
+
+
+def _caixa_geometria(geom: dict) -> tuple[float, float, float, float]:
     def pontos(c):
         return [c] if isinstance(c[0], (int, float)) else [p for x in c for p in pontos(x)]
+    xs, ys = zip(*[(p[0], p[1]) for p in pontos(geom["coordinates"])])
+    return min(xs), min(ys), max(xs), max(ys)
 
-    todos = pontos(geom["coordinates"])
-    cx = sum(p[0] for p in todos) / len(todos)
-    cy = sum(p[1] for p in todos) / len(todos)
-    (ax, ay), k = ENCARTE_NORONHA["centro"], ENCARTE_NORONHA["escala"]
 
-    def mover(c):
-        if isinstance(c[0], (int, float)):
-            return [ax + (c[0] - cx) * k, ay + (c[1] - cy) * k]
-        return [mover(x) for x in c]
+def _retangulo(x1, y1, x2, y2, propriedades: dict) -> dict:
+    return {"type": "Feature", "properties": propriedades,
+            "geometry": {"type": "Polygon",
+                         "coordinates": [[[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]]]}}
 
-    return {**feicao, "geometry": {**geom, "coordinates": mover(geom["coordinates"])}}
+
+def _feicoes_quadro_noronha(ilha_desenho: dict) -> list[dict]:
+    """Moldura do quadro (ilha deslocada + margem) e a area do nome, embaixo dela.
+
+    O nome fica numa feicao invisivel propria, centralizada sob o quadro e
+    mais larga que ele: o `cp` (centro do rotulo no ECharts) posiciona o texto,
+    e a largura da feicao reserva espaco no enquadramento do mapa para ele.
+    """
+    m = NORONHA["margem"]
+    x1, y1, x2, y2 = _caixa_geometria(ilha_desenho["geometry"])
+    q = (x1 - m, y1 - m, x2 + m, y2 + m)
+    cx = (q[0] + q[2]) / 2
+    prop = cfg.GEO_NAME_PROPERTY
+    return [
+        _retangulo(*q, {prop: CODIGO_QUADRO_NORONHA}),
+        _retangulo(cx - 0.45, q[1] - 0.22, cx + 0.45, q[1] - 0.04,
+                   {prop: CODIGO_ROTULO_NORONHA, "cp": [cx, q[1] - 0.13]}),
+    ]
 
 
 # Contorno do estado (gerado por prep/01_contorno_pe.R), juntado ao FIM da
@@ -308,7 +359,7 @@ def preparar_malhas_base() -> str:
     impressao = json.dumps({
         "geocodigos": sorted(GEO_DICT["municipio_geocodigo"].tolist()),
         "bytes": [f.stat().st_size if f.exists() else None for f in fontes + [CONTORNO_ARQUIVO]],
-        "encarte": ENCARTE_NORONHA,
+        "noronha": NORONHA,
     })
     versao = hashlib.md5(impressao.encode()).hexdigest()[:10]
     nome = f"BASE_MUN_{versao}.json"
@@ -323,7 +374,7 @@ def preparar_malhas_base() -> str:
             log.warning("Malha ausente: %s", f.name)
             continue
         js = json.loads(f.read_text(encoding="utf-8"))
-        feicoes += [_mover_noronha(ft) if str(ft["properties"].get(cfg.GEO_NAME_PROPERTY)) == NORONHA else ft
+        feicoes += [{**ft, "geometry": _desloca_geometria(ft["geometry"])}
                     for ft in js["features"]
                     if str(ft["properties"].get(cfg.GEO_NAME_PROPERTY)) in codigos]
     if len(feicoes) < len(GEO_DICT):
@@ -331,6 +382,10 @@ def preparar_malhas_base() -> str:
                     len(GEO_DICT) - len(feicoes), len(GEO_DICT))
     tmp = destino.with_suffix(".tmp")
     feicoes += _feicoes_contorno()
+    ilha = [ft for ft in feicoes
+            if str(ft["properties"].get(cfg.GEO_NAME_PROPERTY)) == NORONHA["codigo_ibge"]]
+    if ilha:
+        feicoes += _feicoes_quadro_noronha(ilha[0])
     tmp.write_text(json.dumps({"type": "FeatureCollection", "features": feicoes}), encoding="utf-8")
     tmp.replace(destino)
     log.info("Malhas recortadas: %d municipios -> %s", len(feicoes), destino)
