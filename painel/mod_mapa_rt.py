@@ -15,6 +15,15 @@
 # O municipio em foco (selected_location) e destacado; os demais ficam
 # esmaecidos. Municipios "sem historico suficiente" ficam ocultos por padrao.
 # Com 185 municipios, rotulos que se sobrepoem sao escondidos (hideOverlap).
+#
+# BORDAS: todo ponto tem contorno cinza claro (mesmo tom das bordas do mapa),
+# para separar pontos sobrepostos e os de cor clara do fundo.
+#
+# TRILHA: o municipio em foco mostra onde estava nas semanas anteriores
+# (N_SEMANAS_TRILHA posicoes, contando a atual): o quadro e recalculado com a
+# base cortada uma, duas e tres semanas antes, e os pontos sao ligados por
+# setas ate a posicao atual. Semana sem posicao valida (sem historico) fica
+# fora da trilha.
 # ==============================================================================
 
 from __future__ import annotations
@@ -45,6 +54,14 @@ MIN_ANOS_HISTORICO_RT = 2
 
 SIMBOLO_FORMA = {f["id"]: f["simbolo"] for f in LIMIARES_FORMA}
 
+# Contorno dos pontos: o mesmo cinza do contorno do estado no mapa.
+COR_BORDA_PONTO = "#94A3AC"
+LARGURA_BORDA_PONTO = 0.8
+
+# Posicoes na trilha do municipio em foco, contando a semana atual.
+N_SEMANAS_TRILHA = 4
+TAMANHO_MAX_FOCO = 26
+
 # Escala divergente: abaixo do normal em azul, acima em terracota; dentro de
 # cada lado, o tom mais forte e o pior cenario.
 CORES_QUADRANTE = {
@@ -63,15 +80,20 @@ ROTULOS_QUADRANTE = {
 }
 
 
-@lru_cache(maxsize=16)
-def calcular_quadro_tendencia(janela: int = 4) -> dict:
+@lru_cache(maxsize=64)
+def calcular_quadro_tendencia(janela: int = 4, ate: pd.Timestamp | None = None) -> dict:
     """Uma linha por municipio, pronta para o grafico.
+
+    `ate`: corta a base nessa semana (inclusive) - e assim que a trilha
+    calcula a posicao das semanas anteriores. None = base inteira.
 
     LIMITACAO CONHECIDA (igual ao RIDE): o casamento com o historico usa o
     numero da semana; se a janela cruzar a virada do ano, os anos historicos
     ficam levemente deslocados perto da fronteira.
     """
     s = SERIE_MUNICIPIOS
+    if ate is not None:
+        s = s[s["data_ini_se"] <= ate]
     data_max = s["data_ini_se"].max()
     ano_recente = data_max.year
     se_ref_semana = int(s.loc[s["data_ini_se"] == data_max, "semana"].iloc[0])
@@ -134,6 +156,60 @@ def calcular_quadro_tendencia(janela: int = 4) -> dict:
         "atual_ini": f"{atual_ini:%d/%m}", "atual_fim": f"{atual_fim:%d/%m}",
         "ant_ini": f"{ant_ini:%d/%m}", "ant_fim": f"{ant_fim:%d/%m}",
     }
+
+
+@lru_cache(maxsize=16)
+def calcular_trilha(janela: int = 4) -> list[dict]:
+    """Posicao de cada municipio nas semanas anteriores, da mais antiga a mais recente.
+
+    Cada item: {"semana": "SE 37", "pos": {geocodigo: (x, y)}} - so municipios
+    com posicao valida (fora da faixa "sem historico") naquela semana.
+    """
+    data_max = SERIE_MUNICIPIOS["data_ini_se"].max()
+    passos = []
+    for k in range(N_SEMANAS_TRILHA - 1, 0, -1):
+        ate = data_max - pd.Timedelta(weeks=k)
+        d = calcular_quadro_tendencia(janela, ate)["dados"]
+        ok = d[(d["quadrante"] != "sem_base") & d["x_val"].notna() & d["taxa_cresc"].notna()]
+        sem = int(SERIE_MUNICIPIOS.loc[SERIE_MUNICIPIOS["data_ini_se"] == ate, "semana"].iloc[0])
+        passos.append({"semana": f"SE {sem:02d}",
+                       "pos": {int(r.municipio_geocodigo): (float(r.x_val), float(r.taxa_cresc))
+                               for r in ok.itertuples()}})
+    return passos
+
+
+def _encurtar(a, b, f):
+    """Ponto a f do caminho de a ate b: a seta para antes do alvo e nao some sob ele."""
+    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]
+
+
+def series_trilha(cod: int, atual: tuple[float, float] | None, se_atual: str, nome: str,
+                  janela: int) -> list[dict]:
+    """Setas + pontos esmaecidos das semanas anteriores do municipio em foco."""
+    pontos = [(p["semana"], p["pos"][cod]) for p in calcular_trilha(janela) if cod in p["pos"]]
+    if atual is not None:
+        pontos.append((se_atual, atual))
+    if len(pontos) < 2:
+        return []
+    tinta = PALETA_DENGUE["tinta"]
+
+    def tt(rotulo, xy):
+        return (f"<b>{nome}</b> · {rotulo}<br/>Vs. mediana histórica: <b>{xy[0]:.2f}x</b>"
+                f"<br/>Vs. janela anterior: <b>{xy[1]:.2f}x</b>").replace(".", ",")
+
+    return [
+        {"name": "__trilha__", "type": "lines", "coordinateSystem": "cartesian2d", "silent": True,
+         "z": 3, "symbol": ["none", "arrow"], "symbolSize": 9,
+         "lineStyle": {"color": tinta, "width": 1.6, "type": "solid", "opacity": 0.75},
+         "data": [{"coords": [list(a[1]), _encurtar(a[1], b[1], 0.82 if i == len(pontos) - 2 else 0.9)]}
+                  for i, (a, b) in enumerate(zip(pontos, pontos[1:]))]},
+        {"name": "__trilha__", "type": "scatter", "z": 3, "symbol": "circle", "symbolSize": 9,
+         "itemStyle": {"color": "#FFFFFF", "borderColor": tinta, "borderWidth": 1.5, "opacity": 0.95},
+         "label": {"show": True, "position": "bottom", "fontSize": 9, "color": PALETA_DENGUE["sub"],
+                   "formatter": JS("function(p){ return p.data.se; }")},
+         "data": [{"value": [round(xy[0], 3), round(xy[1], 3)], "se": se, "tt": tt(se, xy),
+                   "name": nome, "cod": str(cod)} for se, xy in pontos[:-1]]},
+    ]
 
 
 @module.ui
@@ -208,11 +284,14 @@ def mapa_rt_server(input, output, session, selected_location):
                 cor_rot = PALETA_DENGUE["tinta"] if sel else PALETA_DENGUE["sub"]
             else:
                 opac = 0.3 if has_sel and not sel else 1
-                borda, larg = PALETA_DENGUE["superficie"], (2 if sel else 0)
+                borda, larg = ((PALETA_DENGUE["superficie"], 2) if sel
+                               else (COR_BORDA_PONTO, LARGURA_BORDA_PONTO))
                 cor_rot = PALETA_DENGUE["tinta"]
             item = {
                 "value": [x, y],
-                "symbolSize": r.bolha * 1.7 if sel else r.bolha,
+                # Em foco: maior que o normal, mas com teto - senao os municipios
+                # grandes (Recife) cobrem a propria trilha.
+                "symbolSize": min(r.bolha * 1.7, TAMANHO_MAX_FOCO) if sel else r.bolha,
                 "name": r.municipio_nome,
                 "cod": str(r.municipio_geocodigo),   # clique -> recorte do painel
                 "itemStyle": {"color": cor_destaque if sel else cor, "opacity": opac,
@@ -279,6 +358,16 @@ def mapa_rt_server(input, output, session, selected_location):
             },
         })
 
+        # Trilha das semanas anteriores do municipio em foco.
+        if has_sel:
+            r_sel = d[d["municipio_geocodigo"] == sel_cod]
+            atual = None
+            if len(r_sel) and r_sel["quadrante"].iloc[0] != "sem_base":
+                atual = (float(r_sel["x_val"].iloc[0]), float(r_sel["taxa_cresc"].iloc[0]))
+            nome_sel = r_sel["municipio_nome"].iloc[0] if len(r_sel) else ""
+            series += series_trilha(int(sel_cod), atual, f"SE {q['se_ref_semana']:02d}", nome_sel,
+                                    int(input.janela()))
+
         # Tooltip le de uma tabela por nome: a serie "sem base" usa y artificial.
         tabela = {
             r.municipio_nome: {"x": _num(r.x_val, 2), "y": _num(r.taxa_cresc, 2),
@@ -288,6 +377,7 @@ def mapa_rt_server(input, output, session, selected_location):
         }
         tooltip = JS(f"""function(p){{
             if (p.seriesName === '__ref__') return '';
+            if (p.data && p.data.tt) return p.data.tt;
             var tab = {json.dumps(tabela, ensure_ascii=False)};
             var r = tab[p.name];
             if (!r) return '';
