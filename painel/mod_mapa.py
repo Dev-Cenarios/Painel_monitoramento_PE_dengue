@@ -167,6 +167,10 @@ def mapa_server(input, output, session, selected_location):
                 "name": rotulo,
                 "nameProperty": cfg.GEO_NAME_PROPERTY,
                 "roam": True,
+                # Ancorado no topo (abaixo do botao "Visao geral"), em vez de
+                # centralizado: o quadro de Fernando de Noronha fica colado em
+                # cima do card.
+                "top": 44,
                 "itemStyle": {"borderColor": COR_BORDA_MUN, "borderWidth": 0.6},
                 # Sem isto o ECharts desenha o "nome" interno (o codigo IBGE) ao
                 # passar o mouse, mesmo com o tooltip ja resolvendo o nome.

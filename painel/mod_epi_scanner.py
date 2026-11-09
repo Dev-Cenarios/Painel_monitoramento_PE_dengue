@@ -113,6 +113,7 @@ def epi_scanner_server(input, output, session):
             "series": [{
                 "type": "map", "map": "BASE_MUN", "name": rotulo,
                 "nameProperty": cfg.GEO_NAME_PROPERTY, "roam": True,
+                "top": 44,   # ancorado no topo, como o mapa principal
                 "itemStyle": {"borderColor": COR_BORDA_MUN, "borderWidth": 0.6},
                 "label": {"show": False},
                 "emphasis": {"itemStyle": {"areaColor": TONS_AZUL["300"]}, "label": {"show": False}},

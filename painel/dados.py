@@ -276,7 +276,7 @@ NORONHA = {
     # Centro do quadro de detalhe: no alto, acima da divisa norte, na ponta
     # leste do estado (canto superior direito do mapa) - pedido do usuario. O
     # modelo da equipe usa (-34,05, -8,40), no mar a leste do Recife.
-    "destino": (-35.10, -6.55),
+    "destino": (-35.10, -5.70),
     # Ampliacao linear (4x em cada direcao, 16x em area)
     "escala": 4.0,
     # Margem do quadro em volta da ilha deslocada (graus)
