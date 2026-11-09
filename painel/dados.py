@@ -273,8 +273,10 @@ NORONHA = {
     "caixa": {"xmin": -32.55, "ymin": -3.95, "xmax": -32.30, "ymax": -3.74},
     # Ponto do arquipelago que vira o centro do quadro
     "centro": (-32.4267, -3.8430),
-    # Centro do quadro de detalhe: no mar, a leste do Recife
-    "destino": (-34.05, -8.40),
+    # Centro do quadro de detalhe: no mar, a leste do Recife. Mesma latitude
+    # do modelo da equipe (-8,40), mais afastado da costa a pedido do usuario
+    # (o modelo usa -34,05).
+    "destino": (-33.20, -8.40),
     # Ampliacao linear (4x em cada direcao, 16x em area)
     "escala": 4.0,
     # Margem do quadro em volta da ilha deslocada (graus)
